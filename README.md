@@ -13,29 +13,28 @@ KubeIdle is a Kubernetes controller designed to automatically scale down idle po
 
 To install KubeIdle in your Kubernetes cluster:
 
-'''bash
+```bash
 kubectl apply -f https://raw.githubusercontent.com/hayeeabdul/kubeidle/main/deploy/kubeidle.yaml
-'''
+```
 
 ## Configuration
 
 KubeIdle can be configured via a ConfigMap. Here's an example configuration:
 
-'''yaml
+```yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
-name: kubeidle-config
-namespace: kube-system
+  name: kubeidle-config
+  namespace: kube-system
 data:
-config.yaml: |
-idleThreshold: 5m
-checkInterval: 1m
-excludedNamespaces:
-kube-system
-monitoring
-'''
-
+  config.yaml: |
+    idleThreshold: 5m
+    checkInterval: 1m
+    excludedNamespaces:
+      - kube-system
+      - monitoring
+```
 
 ## Usage
 
