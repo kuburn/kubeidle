@@ -1,0 +1,84 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubeidle
+  namespace: default
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubeidle-role
+  namespace: default
+rules:
+  - apiGroups: ["", "apps"]
+    resources: ["pods", "deployments", "daemonsets", "statefulsets"]
+    verbs: ["get", "list", "watch", "update"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubeidle-rolebinding
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubeidle-role
+subjects:
+  - kind: ServiceAccount
+    name: kubeidle
+    namespace: default
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubeidle-config
+  namespace: default
+data:
+  START_TIME: "1800"  # Change to desired start time in 24-hour format
+  STOP_TIME: "0800"   # Change to desired stop time in 24-hour format
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubeidle
+  namespace: default
+  labels:
+    app: kubeidle
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubeidle
+  template:
+    metadata:
+      labels:
+        app: kubeidle
+    spec:
+      serviceAccountName: kubeidle
+      containers:
+        - name: kubeidle
+          image: your-registry/kubeidle:latest  # Replace with your image registry and tag
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: START_TIME
+              valueFrom:
+                configMapKeyRef:
+                  name: kubeidle-config
+                  key: START_TIME
+            - name: STOP_TIME
+              valueFrom:
+                configMapKeyRef:
+                  name: kubeidle-config
+                  key: STOP_TIME
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi

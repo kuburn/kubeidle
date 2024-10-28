@@ -1,0 +1,24 @@
+replicaCount: 1
+
+image:
+  repository: your-registry/kubeidle
+  tag: latest
+  pullPolicy: IfNotPresent
+
+startTime: "1800"
+stopTime: "0800"
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+rbac:
+  create: true
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kubeidle.fullname" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "kubeidle.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "kubeidle.name" . }}
+    spec:
+      serviceAccountName: {{ include "kubeidle.fullname" . }}
+      containers:
+        - name: kubeidle
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: START_TIME
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "kubeidle.fullname" . }}-config
+                  key: START_TIME
+            - name: STOP_TIME
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "kubeidle.fullname" . }}-config
+                  key: STOP_TIME
+          resources:
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .Values.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+      nodeSelector: {{ .Values.nodeSelector }}
+      tolerations: {{ toYaml .Values.tolerations | nindent 8 }}
+      affinity: {{ toYaml .Values.affinity | nindent 8 }}
