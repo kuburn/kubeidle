@@ -1,8 +1,8 @@
-#kubeidle
+# kubeidle
 
 kubeidle is a Kubernetes controller that watches for newly created Pods and scales down the owning resources (such as Deployments, DaemonSets, and StatefulSets) based on a specified time window. This tool is useful for saving resources in non-production environments by automatically scaling down workloads during off-hours.
 
-##Features
+## Features
 
 	•	Namespace Watcher: Monitors the default namespace for newly created Pods.
 	•	Owner Detection: Determines if the owner of the Pod is a Deployment, DaemonSet, or StatefulSet.
@@ -10,12 +10,12 @@ kubeidle is a Kubernetes controller that watches for newly created Pods and scal
 	•	Configurable Time Window: Specify start and stop times in UTC to control when scaling occurs.
 	•	RBAC Support: Ensures necessary permissions for accessing Kubernetes API resources.
 
-##Prerequisites
+## Prerequisites
 
 	•	Kubernetes Cluster: A running Kubernetes cluster.
 	•	Helm: Helm 3 or later installed on your system to manage Kubernetes packages.
 
-##Installation
+## Installation
 
 Clone the repository and navigate to the project root:
 
@@ -24,7 +24,7 @@ git clone https://github.com/yourusername/kubeidle.git
 cd kubeidle
 ```
 
-##Configuration
+## Configuration
 
 The primary configuration is managed through environment variables. You can specify the time window in 24-hour format:
 
@@ -64,7 +64,7 @@ tolerations: []
 affinity: {}
 ```
 
-##Deploying kubeidle
+## Deploying kubeidle
 
 To deploy kubeidle using Helm, use the following command in the project root directory:
 
@@ -88,8 +88,7 @@ You can deploy kubeidle directly by referencing the raw URL of this file in your
 kubectl apply -f https://raw.githubusercontent.com/hayeeabdul/kubeidle/main/manifest/kubeidle.yaml
 ```
 
-
-##Updating kubeidle Configuration
+## Updating kubeidle Configuration
 
 To update the time window or other configurations after installation, use Helm’s upgrade command:
 
@@ -105,7 +104,7 @@ kubectl create configmap kubeidle-config --from-literal=START_TIME="2000" --from
 ```
 After that, kubeidle will automatically pick up the new configuration and start scaling the resources accordingly.
 
-##Verifying Deployment
+## Verifying Deployment
 
 Once deployed, you can check that kubeidle is running with:
 
@@ -115,11 +114,11 @@ kubectl get pods -n kubeidle
 
 You should see a Pod running in the namespace you deployed the chart to (default by default).
 
-##Usage
+## Usage
 
 kubeidle will monitor the default namespace (or the configured namespace if modified) for new Pods. During the specified time window (e.g., 8:00 PM to 8:00 AM UTC), it will scale down the parent Deployment, DaemonSet, or StatefulSet of any newly created Pod it detects. Outside of this window, kubeidle will remain in a dormant state without scaling any resources.
 
-##Uninstalling kubeidle
+## Uninstalling kubeidle
 
 To remove kubeidle from your cluster, run:
 
@@ -129,7 +128,7 @@ helm uninstall kubeidle --namespace kubeidle
 
 This command deletes all resources associated with the Helm chart.
 
-Project Structure
+## Project Structure
 
 The project is organized as follows:
 
@@ -149,28 +148,26 @@ kubeidle/
 └── README.md              # Project documentation
 ```
 
-Development
+## Development
 
-	1.	**Build** the Docker Image:
+	1.	Build the Docker Image:
 
 ```bash
 docker build -t your-registry/kubeidle .
 ```
-
-	2.	**Push** to Container Registry:
+	2.	Push to Container Registry:
 
 ```bash
 docker push your-registry/kubeidle
 ```
+	3.	Update `values.yaml` to reference your registry and image tag.
 
-	3.	**Update** values.yaml to reference your registry and image tag.
-
-##Contributing
+## Contributing
 
 Contributions are welcome! Please open an issue or pull request with any improvements or bug fixes.
 
 This README.md covers all aspects of using, configuring, deploying, and maintaining kubeidle with Helm and Docker. Adjustments can be made as needed for further customization.
 
-##License
+## License
 
 This project is licensed under the MIT License. See the LICENSE file for details.
