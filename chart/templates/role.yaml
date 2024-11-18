@@ -7,5 +7,5 @@ metadata:
 rules:
   - apiGroups: ["", "apps"]
     resources: ["pods", "deployments", "daemonsets", "statefulsets"]
-    verbs: ["get", "list", "watch", "update"]
+    verbs: ["get", "list", "watch", "update","patch"]
 {{- end }}

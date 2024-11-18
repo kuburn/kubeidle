@@ -1,5 +1,5 @@
 # Stage 1: Build the Go binary
-FROM golang:1.19 AS builder
+FROM golang:1.23.3 AS builder
 
 # Set the working directory inside the container
 WORKDIR /app
@@ -12,7 +12,7 @@ RUN go mod download
 COPY . .
 
 # Build the kubeidle binary for Linux
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o kubeidle cmd/kubeidle/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o kubeidle cmd/kubeidle/main.go
 
 # Stage 2: Create a minimal final image
 FROM alpine:latest

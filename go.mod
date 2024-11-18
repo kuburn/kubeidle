@@ -1,6 +1,6 @@
-module github.com/hayeeabdul/kubeidle
+module github.com/kuburn/kubeidle
 
-go 1.22.5
+go 1.23
 
 require (
 	k8s.io/api v0.31.1

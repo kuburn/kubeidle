@@ -4,8 +4,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/hayeeabdul/kubeidle/pkg/config"
-	"github.com/hayeeabdul/kubeidle/pkg/controller"
+	"github.com/kuburn/kubeidle/pkg/config"
+	"github.com/kuburn/kubeidle/pkg/controller"
 )
 
 func main() {

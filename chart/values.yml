@@ -1,11 +1,13 @@
 replicaCount: 1
 
 image:
-  repository: your-registry/kubeidle
-  tag: latest
+  repository: ghcr.io/kuburn/kubeidle/kubeidle
+  tag: v0.11
   pullPolicy: IfNotPresent
+  pullSecrets:
+  - name: dockerconfigjson-github-com
 
-startTime: "1800"
+startTime: "2354"
 stopTime: "0800"
 
 resources:
@@ -19,6 +21,6 @@ resources:
 rbac:
   create: true
 
-nodeSelector: {}
+
 tolerations: []
 affinity: {}
