@@ -6,11 +6,13 @@ import (
 
 	"github.com/kuburn/kubeidle/pkg/config"
 	"github.com/kuburn/kubeidle/pkg/controller"
+	"github.com/kuburn/kubeidle/pkg/server"
 )
 
 func main() {
 	startTime := os.Getenv("START_TIME")
 	stopTime := os.Getenv("STOP_TIME")
+	metricsPort := 9095 // Default metrics port
 
 	if startTime == "" || stopTime == "" {
 		log.Fatal("Environment variables START_TIME and STOP_TIME must be set")
@@ -25,6 +27,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating PodController: %v", err)
 	}
+
+	// Start metrics server
+	metricsServer := server.NewMetricsServer(metricsPort)
+	go func() {
+		if err := metricsServer.Start(); err != nil {
+			log.Printf("Error starting metrics server: %v", err)
+		}
+	}()
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)

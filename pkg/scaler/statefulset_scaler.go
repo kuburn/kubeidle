@@ -21,7 +21,6 @@ func (s *StatefulSetScaler) ScaleDown(clientset *kubernetes.Clientset, namespace
 			return fmt.Errorf("failed to get StatefulSet: %v", getErr)
 		}
 		log.Println("Successfully retrieved the latest StatefulSet")
-		log.Printf("Before resource version: %s", statefulset.ResourceVersion)
 
 		// Create a deep copy to ensure safe modifications
 		statefulsetCopy := statefulset.DeepCopy()

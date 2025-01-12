@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/kuburn/kubeidle/pkg/metrics"
 	"github.com/kuburn/kubeidle/pkg/scaler"
 
 	v1 "k8s.io/api/core/v1"
@@ -42,7 +43,7 @@ func NewPodController() (*PodController, error) {
 		clientset: clientset,
 		informer:  podInformer,
 		scalers: map[string]scaler.Scalable{
-			"Deployment":  &scaler.DeploymentScaler{},
+			"ReplicaSet":  &scaler.DeploymentScaler{},
 			"DaemonSet":   &scaler.DaemonSetScaler{},
 			"StatefulSet": &scaler.StatefulSetScaler{},
 		},
@@ -59,25 +60,42 @@ func NewPodController() (*PodController, error) {
 // SetActiveState sets the controller's active state.
 func (pc *PodController) SetActiveState(state bool) {
 	pc.active = state
+	if state {
+		metrics.ControllerStatus.Set(1)
+	} else {
+		metrics.ControllerStatus.Set(0)
+	}
 }
 
 // handleAdd handles the logic for scaling down resources when a pod is created.
 func (pc *PodController) handleAdd(obj interface{}) {
 	if !pc.active {
-		log.Println("kubeidle is in stale state. Skipping event handling.")
+		log.Println("kubeidle is inactive. Skipping pod handling.")
 		return
 	}
 
 	pod := obj.(*v1.Pod)
-	log.Printf("New Pod Created: %s in Namespace: %s", pod.Name, pod.Namespace)
+	log.Printf("New Pod detected: %s in Namespace: %s", pod.Name, pod.Namespace)
 	log.Printf("Pod OwnerReferences: %v", pod.OwnerReferences)
 
 	for _, ownerRef := range pod.OwnerReferences {
 		if scaler, exists := pc.scalers[ownerRef.Kind]; exists {
+			startTime := time.Now()
 			err := scaler.ScaleDown(pc.clientset, pod.Namespace, ownerRef.Name)
+			duration := time.Since(startTime).Seconds()
+			metrics.ReconciliationDuration.WithLabelValues("handle_add").Observe(duration)
+
 			if err != nil {
+				metrics.ScaleDownOperationsTotal.WithLabelValues(ownerRef.Kind, pod.Namespace, "failed").Inc()
 				log.Printf("Error scaling down %s: %v", ownerRef.Kind, err)
 			} else {
+				metrics.ScaleDownOperationsTotal.WithLabelValues(ownerRef.Kind, pod.Namespace, "success").Inc()
+				metrics.ResourcesCurrentlyScaledDown.WithLabelValues(ownerRef.Kind, pod.Namespace).Inc()
+				metrics.LastScaleOperationTimestamp.WithLabelValues(
+					ownerRef.Kind,
+					pod.Namespace,
+					"down",
+				).Set(float64(time.Now().Unix()))
 				log.Printf("Scaled down %s: %s", ownerRef.Kind, ownerRef.Name)
 			}
 		}
@@ -85,12 +103,16 @@ func (pc *PodController) handleAdd(obj interface{}) {
 }
 
 func (pc *PodController) InitialReconcile() error {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		metrics.ReconciliationDuration.WithLabelValues("initial").Observe(duration)
+	}()
+
 	if !pc.active {
 		log.Println("kubeidle is inactive. Skipping initial reconciliation.")
 		return nil
 	}
-
-	log.Println("Starting initial reconciliation of existing Pods...")
 
 	log.Println("Starting initial reconciliation of existing Pods...")
 
@@ -103,28 +125,27 @@ func (pc *PodController) InitialReconcile() error {
 		log.Printf("Processing existing Pod: %s in Namespace: %s", pod.Name, pod.Namespace)
 		log.Printf("Pod OwnerReferences: %v", pod.OwnerReferences)
 
-		// Apply scale-down logic directly here
 		for _, ownerRef := range pod.OwnerReferences {
 			if scaler, exists := pc.scalers[ownerRef.Kind]; exists {
 				err := scaler.ScaleDown(pc.clientset, pod.Namespace, ownerRef.Name)
 				if err != nil {
+					metrics.ScaleDownOperationsTotal.WithLabelValues(ownerRef.Kind, pod.Namespace, "failed").Inc()
 					log.Printf("Error scaling down %s: %v", ownerRef.Kind, err)
 				} else {
-					log.Printf("Scaled down %s: %s", ownerRef.Kind, ownerRef.Name)
+					metrics.ScaleDownOperationsTotal.WithLabelValues(ownerRef.Kind, pod.Namespace, "success").Inc()
+					metrics.ResourcesCurrentlyScaledDown.WithLabelValues(ownerRef.Kind, pod.Namespace).Inc()
+					metrics.LastScaleOperationTimestamp.WithLabelValues(
+						ownerRef.Kind,
+						pod.Namespace,
+						"down",
+					).Set(float64(time.Now().Unix()))
 				}
 			}
 		}
 	}
 
-	log.Println("Initial reconciliation completed.")
 	return nil
 }
-
-// Run starts the pod informer.
-// func (pc *PodController) Run(stopCh <-chan struct{}) {
-
-// 	pc.informer.Run(stopCh)
-// }
 
 func (pc *PodController) Run(stopCh <-chan struct{}) {
 	go pc.informer.Run(stopCh) // Start informer in a separate goroutine
@@ -136,7 +157,6 @@ func (pc *PodController) Run(stopCh <-chan struct{}) {
 
 	log.Println("Caches are synced. Controller is ready to process events.")
 
-	// Reconciliation logic in Run
 	for {
 		select {
 		case <-stopCh:
