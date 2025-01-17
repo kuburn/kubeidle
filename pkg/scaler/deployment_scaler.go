@@ -44,6 +44,7 @@ func (d *DeploymentScaler) ScaleDown(clientset *kubernetes.Clientset, namespace 
 
 		// Apply the update using patch
 		_, patchErr := clientset.AppsV1().Deployments(namespace).Patch(context.TODO(), deploymentCopy.Name, types.MergePatchType, []byte(`{"spec":{"replicas":0}}`), metav1.PatchOptions{})
+		log.Printf("Current resource version: %s", deployment.ResourceVersion)
 		if patchErr != nil {
 			return fmt.Errorf("failed to patch %v", patchErr)
 		}

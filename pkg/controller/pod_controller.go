@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	nsconfig "github.com/kuburn/kubeidle/pkg/config"
 	"github.com/kuburn/kubeidle/pkg/metrics"
 	"github.com/kuburn/kubeidle/pkg/scaler"
 
@@ -19,13 +20,14 @@ import (
 
 type PodController struct {
 	clientset *kubernetes.Clientset
-	informer  cache.SharedIndexInformer
+	informers []cache.SharedIndexInformer
 	scalers   map[string]scaler.Scalable
 	active    bool
+	nsConfig  *nsconfig.NamespaceConfig
 }
 
 // NewPodController initializes a new PodController.
-func NewPodController() (*PodController, error) {
+func NewPodController(namespaces []string) (*PodController, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("error building in-cluster config: %v", err)
@@ -36,23 +38,34 @@ func NewPodController() (*PodController, error) {
 		return nil, fmt.Errorf("error creating Kubernetes client: %v", err)
 	}
 
-	informerFactory := informers.NewSharedInformerFactoryWithOptions(clientset, time.Minute*10, informers.WithNamespace("default"))
-	podInformer := informerFactory.Core().V1().Pods().Informer()
+	namespaceConfig := nsconfig.NewNamespaceConfig(namespaces)
 
 	podController := &PodController{
 		clientset: clientset,
-		informer:  podInformer,
+		informers: make([]cache.SharedIndexInformer, 0, len(namespaceConfig.GetNamespaces())),
 		scalers: map[string]scaler.Scalable{
 			"ReplicaSet":  &scaler.DeploymentScaler{},
 			"DaemonSet":   &scaler.DaemonSetScaler{},
 			"StatefulSet": &scaler.StatefulSetScaler{},
 		},
-		active: false,
+		active:   false,
+		nsConfig: namespaceConfig,
 	}
 
-	podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: podController.handleAdd,
-	})
+	// Create informers for each namespace
+	for _, namespace := range namespaceConfig.GetNamespaces() {
+		informer := informers.NewSharedInformerFactoryWithOptions(
+			clientset,
+			time.Minute*10,
+			informers.WithNamespace(namespace),
+		).Core().V1().Pods().Informer()
+
+		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc: podController.handleAdd,
+		})
+
+		podController.informers = append(podController.informers, informer)
+	}
 
 	return podController, nil
 }
@@ -116,29 +129,34 @@ func (pc *PodController) InitialReconcile() error {
 
 	log.Println("Starting initial reconciliation of existing Pods...")
 
-	pods, err := pc.clientset.CoreV1().Pods("default").List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to list pods: %v", err)
-	}
+	// Reconcile pods in all configured namespaces
+	for _, namespace := range pc.nsConfig.GetNamespaces() {
+		pods, err := pc.clientset.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
+		if err != nil {
+			log.Printf("Failed to list pods in namespace %s: %v", namespace, err)
+			continue
+		}
 
-	for _, pod := range pods.Items {
-		log.Printf("Processing existing Pod: %s in Namespace: %s", pod.Name, pod.Namespace)
-		log.Printf("Pod OwnerReferences: %v", pod.OwnerReferences)
+		for _, pod := range pods.Items {
+			log.Printf("Processing existing Pod: %s in Namespace: %s", pod.Name, pod.Namespace)
+			log.Printf("Pod OwnerReferences: %v", pod.OwnerReferences)
 
-		for _, ownerRef := range pod.OwnerReferences {
-			if scaler, exists := pc.scalers[ownerRef.Kind]; exists {
-				err := scaler.ScaleDown(pc.clientset, pod.Namespace, ownerRef.Name)
-				if err != nil {
-					metrics.ScaleDownOperationsTotal.WithLabelValues(ownerRef.Kind, pod.Namespace, "failed").Inc()
-					log.Printf("Error scaling down %s: %v", ownerRef.Kind, err)
-				} else {
-					metrics.ScaleDownOperationsTotal.WithLabelValues(ownerRef.Kind, pod.Namespace, "success").Inc()
-					metrics.ResourcesCurrentlyScaledDown.WithLabelValues(ownerRef.Kind, pod.Namespace).Inc()
-					metrics.LastScaleOperationTimestamp.WithLabelValues(
-						ownerRef.Kind,
-						pod.Namespace,
-						"down",
-					).Set(float64(time.Now().Unix()))
+			for _, ownerRef := range pod.OwnerReferences {
+				if scaler, exists := pc.scalers[ownerRef.Kind]; exists {
+					err := scaler.ScaleDown(pc.clientset, pod.Namespace, ownerRef.Name)
+					if err != nil {
+						metrics.ScaleDownOperationsTotal.WithLabelValues(ownerRef.Kind, pod.Namespace, "failed").Inc()
+						log.Printf("Error scaling down %s: %v", ownerRef.Kind, err)
+					} else {
+						metrics.ScaleDownOperationsTotal.WithLabelValues(ownerRef.Kind, pod.Namespace, "success").Inc()
+						metrics.ResourcesCurrentlyScaledDown.WithLabelValues(ownerRef.Kind, pod.Namespace).Inc()
+						metrics.LastScaleOperationTimestamp.WithLabelValues(
+							ownerRef.Kind,
+							pod.Namespace,
+							"down",
+						).Set(float64(time.Now().Unix()))
+						log.Printf("Scaled down %s: %s", ownerRef.Kind, ownerRef.Name)
+					}
 				}
 			}
 		}
@@ -148,30 +166,39 @@ func (pc *PodController) InitialReconcile() error {
 }
 
 func (pc *PodController) Run(stopCh <-chan struct{}) {
-	go pc.informer.Run(stopCh) // Start informer in a separate goroutine
+	// Start all informers
+	for _, informer := range pc.informers {
+		go informer.Run(stopCh)
+	}
 
-	if !cache.WaitForCacheSync(stopCh, pc.informer.HasSynced) {
-		log.Println("Failed to sync caches.")
-		return
+	// Wait for all caches to sync
+	for _, informer := range pc.informers {
+		if !cache.WaitForCacheSync(stopCh, informer.HasSynced) {
+			log.Println("Failed to sync caches.")
+			return
+		}
 	}
 
 	log.Println("Caches are synced. Controller is ready to process events.")
+
+	// Create a ticker to check active state periodically
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
 
 	for {
 		select {
 		case <-stopCh:
 			log.Println("Stopping PodController.")
 			return
-		default:
+		case <-ticker.C:
 			if pc.active {
 				log.Println("Controller is active. Performing initial reconciliation.")
-				err := pc.InitialReconcile()
-				if err != nil {
+				if err := pc.InitialReconcile(); err != nil {
 					log.Printf("Error during initial reconciliation: %v", err)
 				}
-				return // Reconciliation should only run once per activation
+				// Stop the ticker after successful reconciliation
+				ticker.Stop()
 			}
-			time.Sleep(1 * time.Second) // Avoid busy waiting
 		}
 	}
 }

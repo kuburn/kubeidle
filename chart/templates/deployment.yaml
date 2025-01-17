@@ -2,29 +2,40 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "kubeidle.fullname" . }}
+  labels:
+    {{- include "kubeidle.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: {{ include "kubeidle.name" . }}
+      {{- include "kubeidle.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: {{ include "kubeidle.name" . }}
+        {{- include "kubeidle.selectorLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "kubeidle.fullname" . }}
       containers:
-        - name: kubeidle
+        - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: FallbackToLogsOnError
           ports:
             - name: metrics
-              containerPort: 9090
+              containerPort: 9095
               protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            failureThreshold: 30
+            periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /healthz
               port: metrics
+            initialDelaySeconds: 30
           readinessProbe:
             httpGet:
               path: /healthz
@@ -34,33 +45,28 @@ spec:
               valueFrom:
                 configMapKeyRef:
                   name: {{ include "kubeidle.fullname" . }}-config
-                  key: START_TIME
+                  key: startTime
             - name: STOP_TIME
               valueFrom:
                 configMapKeyRef:
                   name: {{ include "kubeidle.fullname" . }}-config
-                  key: STOP_TIME
+                  key: stopTime
+            - name: NAMESPACES
+              value: {{ join "," .Values.namespaces | quote }}
           resources:
-            limits:
-              cpu: {{ .Values.resources.limits.cpu }}
-              memory: {{ .Values.resources.limits.memory }}
-            requests:
-              cpu: {{ .Values.resources.requests.cpu }}
-              memory: {{ .Values.resources.requests.memory }}
-
-      {{- if .Values.nodeSelector }}
-      nodeSelector: 
-      {{- toYaml .Values.nodeSelector | nindent 8 }}
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
       {{- end }}
-
-      {{- if .Values.tolerations }}
-      tolerations: {{ toYaml .Values.tolerations | nindent 8 }}
-      {{- end}}
-
-      {{- if .Values.affinity }}
-      affinity: {{ toYaml .Values.affinity | nindent 8 }}
-      {{- end}}
- 
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- if .Values.image.pullSecrets }}
       imagePullSecrets: {{ toYaml .Values.image.pullSecrets | nindent 6 }}
       {{- end}}

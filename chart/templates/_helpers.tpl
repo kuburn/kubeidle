@@ -18,6 +18,13 @@ Helper to generate labels for resources.
 {{- define "kubeidle.labels" -}}
 app.kubernetes.io/name: {{ include "kubeidle.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | default .Chart.Version }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | default .Chart.Version | quote}}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end -}}
+
+{{/*
+Selector labels
+*/}}
+{{- define "kubeidle.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "kubeidle.name" . }}
 {{- end -}}
