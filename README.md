@@ -162,6 +162,15 @@ docker push your-registry/kubeidle
 ```
 	3.	Update `values.yaml` to reference your registry and image tag.
 
+## FAQ
+### How to generate private registry secret for ghcr.io:
+
+echo '{"auths":{"ghcr.io":{"auth":"<>"}}}' | kubectl create secret generic dockerconfigjson-github-com --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/dev/stdin
+
+### How to generate private registry secret for quay.io:
+
+echo '{"auths":{"quay.io":{"auth":"<>"}}}' | kubectl create secret generic dockerconfigjson-quay-io --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/dev/stdin
+
 ## Contributing
 
 Contributions are welcome! Please open an issue or pull request with any improvements or bug fixes.
